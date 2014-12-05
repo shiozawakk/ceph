@@ -2708,6 +2708,9 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
@@ -2722,13 +2725,12 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
-  // try old way
+  // try old way.  tolerate EOPNOTSUPP.
   char val;
   if (store->collection_getattr(coll, "remove", &val, 1) > 0)
     return true;
   return false;
 }
-
 
 epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   spg_t pgid,
@@ -2794,6 +2796,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   }
   return cur_epoch;
 }
+
+#pragma GCC diagnostic pop
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
@@ -3624,9 +3628,6 @@ void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
 
   dout(10) << "PG relocked, finalizing" << dendl;
 
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
-
   dout(10) << __func__ << " done." << dendl;
 }
 
@@ -3662,8 +3663,6 @@ void PG::build_inc_scrub_map(
   }
 
   get_pgbackend()->be_scan_list(map, ls, false, handle);
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
 }
 
 void PG::repair_object(
