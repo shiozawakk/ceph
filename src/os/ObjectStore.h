@@ -886,13 +886,12 @@ public:
       ops++;
     }
 
+    // NOTE: Collection attr operations are all DEPRECATED.  new
+    // backends need not implement these at all.
+
     /// Set an xattr on a collection
-    void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
-      string n(name);
-      collection_setattr(cid, n, val);
-    }
-    /// Set an xattr on a collection
-    void collection_setattr(coll_t cid, const string& name, bufferlist& val) {
+    void collection_setattr(coll_t cid, const string& name, bufferlist& val)
+      __attribute__ ((deprecated)) {
       __u32 op = OP_COLL_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -902,12 +901,8 @@ public:
     }
 
     /// Remove an xattr from a collection
-    void collection_rmattr(coll_t cid, const char* name) {
-      string n(name);
-      collection_rmattr(cid, n);
-    }
-    /// Remove an xattr from a collection
-    void collection_rmattr(coll_t cid, const string& name) {
+    void collection_rmattr(coll_t cid, const string& name)
+      __attribute__ ((deprecated)) {
       __u32 op = OP_COLL_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -915,7 +910,8 @@ public:
       ops++;
     }
     /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
+    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
+      __attribute__ ((deprecated)) {
       __u32 op = OP_COLL_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -923,7 +919,8 @@ public:
       ops++;
     }
     /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset) {
+    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset)
+      __attribute__ ((deprecated)) {
       __u32 op = OP_COLL_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
