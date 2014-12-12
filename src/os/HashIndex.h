@@ -311,23 +311,29 @@ private:
     ); ///< @return String representation of hash
 
   /// Get hash from hash prefix string e.g. "FFFFAB" -> 0xFFFFAB00
-  static uint32_t hash_prefix_to_hash(
-    string prefix ///< [in] string to convert
+  static void hash_prefix_to_pool_hash(
+    string prefix, ///< [in] string to convert
+    int64_t *pool, ///< [out] pool id
+    uint32_t *hash ///< [out] hash id
     ); ///< @return Hash
 
   /// Get hash mod from path
   static void path_to_hobject_hash_prefix(
     const vector<string> &path,///< [in] path to convert
     uint32_t *bits,            ///< [out] bits
-    uint32_t *hash             ///< [out] hash
+    uint32_t *hash,            ///< [out] hash
+    int64_t *pool             ///< [out] pool
     ) {
+    assert(!path.empty());
     string hash_str;
     for (vector<string>::const_iterator i = path.begin();
 	 i != path.end();
 	 ++i) {
       hash_str.push_back(*i->begin());
     }
-    uint32_t rev_hash = hash_prefix_to_hash(hash_str);
+    int64_t rev_pool;
+    uint32_t rev_hash;
+    hash_prefix_to_pool_hash(hash_str, &rev_pool, &rev_hash);
     if (hash)
       *hash = rev_hash;
     if (bits)

@@ -113,9 +113,10 @@ int HashIndex::col_split_level(
        ++i) {
     uint32_t bits = 0;
     uint32_t hash = 0;
+    int64_t pool = 0;
     vector<string> sub_path(path.begin(), path.end());
     sub_path.push_back(*i);
-    path_to_hobject_hash_prefix(sub_path, &bits, &hash);
+    path_to_hobject_hash_prefix(sub_path, &bits, &hash, &pool);
     if (bits < inbits) {
       if (hobject_t::match_hash(hash, bits, match)) {
 	r = col_split_level(
@@ -726,7 +727,9 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 
 void HashIndex::get_path_components(const ghobject_t &oid,
 				    vector<string> *path) {
-  char buf[MAX_HASH_LEVEL + 1];
+  char buf[20];
+  snprintf(buf, sizeof(buf), "%016llx", (long long unsigned)oid.hobj.pool);
+  path->push_back(buf);
   snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_filestore_key());
 
   // Path components are the hex characters of oid.hobj.hash, least
@@ -751,17 +754,22 @@ string HashIndex::get_path_str(const ghobject_t &oid) {
   return get_hash_str(oid.hobj.hash);
 }
 
-uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
-  while (prefix.size() < sizeof(uint32_t) * 2) {
-    prefix.push_back('0');
+void HashIndex::hash_prefix_to_pool_hash(string prefix,
+					 int64_t *pool,
+					 uint32_t *hash) {
+  string spool = prefix.substr(0, 16);
+  sscanf(spool.c_str(), "%llx", (unsigned long long*)pool);
+  string shash = prefix.substr(16);
+  while (shash.size() < (sizeof(uint32_t)) * 2) {
+    shash.push_back('0');
   }
-  uint32_t hash;
-  sscanf(prefix.c_str(), "%x", &hash);
+  uint32_t h;
+  sscanf(shash.c_str(), "%x", &h);
   // nibble reverse
-  hash = ((hash & 0x0f0f0f0f) << 4) | ((hash & 0xf0f0f0f0) >> 4);
-  hash = ((hash & 0x00ff00ff) << 8) | ((hash & 0xff00ff00) >> 8);
-  hash = ((hash & 0x0000ffff) << 16) | ((hash & 0xffff0000) >> 16);
-  return hash;
+  h = ((h & 0x0f0f0f0f) << 4) | ((h & 0xf0f0f0f0) >> 4);
+  h = ((h & 0x00ff00ff) << 8) | ((h & 0xff00ff00) >> 8);
+  h = ((h & 0x0000ffff) << 16) | ((h & 0xffff0000) >> 16);
+  *hash = h;
 }
 
 int HashIndex::get_path_contents_by_hash(const vector<string> &path,
@@ -833,6 +841,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
   if (r < 0)
     return r;
   dout(20) << " prefixes " << hash_prefixes << dendl;
+  dout(20) << " objects " << objects << dendl;
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
@@ -840,8 +849,12 @@ int HashIndex::list_by_hash(const vector<string> &path,
       make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
       if (min_count > 0 && out->size() > (unsigned)min_count) {
-	if (next)
-	  *next = ghobject_t(hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1, ""));
+	if (next) {
+	  int64_t pool;
+	  uint32_t hash;
+	  hash_prefix_to_pool_hash(*i, &pool, &hash);
+	  *next = ghobject_t(hobject_t("", "", CEPH_NOSNAP, hash, pool, ""));
+	}
 	return 0;
       }
       *(next_path.rbegin()) = *(i->rbegin());
