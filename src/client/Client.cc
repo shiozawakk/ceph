@@ -354,6 +354,8 @@ void Client::dump_cache(Formatter *f)
 
 void Client::dump_status(Formatter *f)
 {
+  assert(client_lock.is_locked_by_me());
+
   ldout(cct, 1) << __func__ << dendl;
 
   const OSDMap *osdmap = objecter->get_osdmap_read();
@@ -361,6 +363,19 @@ void Client::dump_status(Formatter *f)
   objecter->put_osdmap_read();
 
   if (f) {
+    f->open_object_section("metadata");
+    {
+      for (std::map<std::string, std::string>::const_iterator i = metadata.begin();
+           i != metadata.end(); ++i) {
+        f->dump_string(i->first.c_str(), i->second);
+      }
+    }
+    f->close_section();
+
+    f->dump_int("dentry_count", lru.lru_get_size());
+    f->dump_int("dentry_pinned_count", lru.lru_get_num_pinned());
+    f->dump_int("inode_count", inode_map.size());
+    f->dump_int("mds_epoch", mdsmap->get_epoch());
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
   }
