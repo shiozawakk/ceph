@@ -6455,6 +6455,12 @@ int Client::_release_fh(Fh *f)
 
   // Finally, read any async err (i.e. from flushes) from the inode
   int err = in->async_err;
+  if (err != 0) {
+    ldout(cct, 1) << "_release_fh " << f << " on inode " << *in << " caught async_err = "
+                  << cpp_strerror(err) << dendl;
+  } else {
+    ldout(cct, 10) << "_release_fh " << f << " on inode " << *in << " no async_err state" << dendl;
+  }
 
   put_inode(in);
   delete f;
@@ -7186,8 +7192,16 @@ done:
 
 int Client::_flush(Fh *f)
 {
-  // no-op, for now.  hrm.
-  return 0;
+  Inode *in = f->inode;
+  int err = in->async_err;
+  if (err != 0) {
+    ldout(cct, 1) << __func__ << ": " << f << " on inode " << *in << " caught async_err = "
+                  << cpp_strerror(err) << dendl;
+  } else {
+    ldout(cct, 10) << __func__ << ": " << f << " on inode " << *in << " no async_err state" << dendl;
+  }
+
+  return err;
 }
 
 int Client::truncate(const char *relpath, loff_t length) 
