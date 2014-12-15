@@ -86,6 +86,15 @@ namespace librbd {
       lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
       break;
     }
+
+    {
+      Mutex::Locker l(ictx->aio_lock);
+      assert(ictx->pending_aio != 0);
+      --ictx->pending_aio;
+      ictx->pending_aio_cond.Signal();
+      ictx = NULL;
+    }
+
     if (complete_cb) {
       complete_cb(rbd_comp, complete_arg);
     }
