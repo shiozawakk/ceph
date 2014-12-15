@@ -1,5 +1,6 @@
 #include "tracing/tracing-common.h"
 #include "include/rados/librados.h"
+#include "include/int_types.h"
 
 TRACEPOINT_EVENT(librados, rados_create_enter,
     TP_ARGS(
@@ -2543,12 +2544,10 @@ TRACEPOINT_EVENT(librados, rados_write_op_rmxattr_exit,
 TRACEPOINT_EVENT(librados, rados_write_op_create_enter,
     TP_ARGS(
         rados_write_op_t, op,
-        int, exclusive,
-        const char*, category),
+        int, exclusive),
     TP_FIELDS(
         ctf_integer_hex(rados_write_op_t, op, op)
         ctf_integer(int, exclusive, exclusive)
-        ceph_ctf_string(category, category)
     )
 )
 

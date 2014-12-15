@@ -216,7 +216,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_dirty_age,
 				  true);
   objecter_finisher.start();
-  filer = new Filer(objecter);
+  filer = new Filer(objecter, &objecter_finisher);
 }
 
 
@@ -543,7 +543,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
   if (s->caps.size() > 0)
-    _invalidate_kernel_dcache();
+    _invalidate_kernel_dcache(s);
 }
 
 void Client::trim_dentry(Dentry *dn)
@@ -1752,6 +1752,10 @@ void Client::handle_client_session(MClientSession *m)
     session->con->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
+  case CEPH_SESSION_FORCE_RO:
+    force_session_readonly(session);
+    break;
+
   default:
     assert(0);
   }
@@ -2148,6 +2152,8 @@ void Client::send_reconnect(MetaSession *session)
   // trim unused caps to reduce MDS's cache rejoin time
   trim_cache_for_reconnect(session);
 
+  session->readonly = false;
+
   if (session->release) {
     session->release->put();
     session->release = NULL;
@@ -2541,6 +2547,10 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
       }
       ldout(cct, 10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
     }
+
+    if ((need & CEPH_CAP_FILE_WR) && in->auth_cap &&
+	in->auth_cap->session->readonly)
+      return -EROFS;
     
     wait_on_list(in->waitfor_caps);
   }
@@ -3277,16 +3287,19 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-void Client::_invalidate_kernel_dcache()
+void Client::_invalidate_kernel_dcache(MetaSession *s)
 {
-  // notify kernel to invalidate top level directory entries. As a side effect,
-  // unused inodes underneath these entries get pruned.
-  if (dentry_invalidate_cb && root->dir) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
+  if (!dentry_invalidate_cb)
+    return;
+
+  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
+    Inode *in = (*p)->inode;
+    if (in->dn_set.empty())
+      continue;
+    for (set<Dentry*>::iterator q = in->dn_set.begin();
+	 q != in->dn_set.end();
+	 ++q) {
+      _schedule_invalidate_dentry_callback(*q, false);
     }
   }
 }
@@ -3320,14 +3333,8 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
-          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
-            // Only issue one of these per DN for inodes in root: handle
-            // others more efficiently by calling for root-child DNs at
-            // the end of this function.
-            _schedule_invalidate_dentry_callback(dn, true);
-          }
+	  _schedule_invalidate_dentry_callback(dn, false);
 	  trim_dentry(dn);
-
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
@@ -3348,9 +3355,16 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+}
 
-  if (s->caps.size() > max)
-    _invalidate_kernel_dcache();
+void Client::force_session_readonly(MetaSession *s)
+{
+  s->readonly = true;
+  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
+    Inode *in = (*p)->inode;
+    if (in->caps_wanted() & CEPH_CAP_FILE_WR)
+      signal_cond_list(in->waitfor_caps);
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)

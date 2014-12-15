@@ -429,11 +429,14 @@ protected:
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
-  void _invalidate_kernel_dcache();
+  void _invalidate_kernel_dcache(MetaSession *s);
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
-  
+
+  // force read-only
+  void force_session_readonly(MetaSession *s);
+
   // trace generation
   ofstream traceout;
 
