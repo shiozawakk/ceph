@@ -789,7 +789,7 @@ bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 void ReplicatedPG::do_pg_op(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp *>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
 
   op->mark_started();
@@ -1369,7 +1369,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
 void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
@@ -2211,7 +2211,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
   assert(have_same_or_newer_map(m->map_epoch));
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
 
   OSDOp *first = NULL;
@@ -2249,7 +2249,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
 {
   MOSDSubOpReply *r = static_cast<MOSDSubOpReply *>(op->get_req());
-  assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(r->get_type() == MSG_OSD_SUBOPREPLY);
   if (r->ops.size() >= 1) {
     OSDOp& first = r->ops[0];
     switch (first.op.op) {
@@ -2265,7 +2265,7 @@ void ReplicatedPG::do_scan(
   ThreadPool::TPHandle &handle)
 {
   MOSDPGScan *m = static_cast<MOSDPGScan*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_SCAN);
+  assert(m->get_type() == MSG_OSD_PG_SCAN);
   dout(10) << "do_scan " << *m << dendl;
 
   op->mark_started();
@@ -2350,7 +2350,7 @@ void ReplicatedPG::do_scan(
 void ReplicatedBackend::_do_push(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
   vector<PushReplyOp> replies;
@@ -2409,7 +2409,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
   vector<PullOp> replies(1);
@@ -2457,7 +2457,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 void ReplicatedBackend::do_pull(OpRequestRef op)
 {
   MOSDPGPull *m = static_cast<MOSDPGPull *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PULL);
+  assert(m->get_type() == MSG_OSD_PG_PULL);
   pg_shard_t from = m->from;
 
   map<pg_shard_t, vector<PushOp> > replies;
@@ -2473,7 +2473,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
 void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
   MOSDPGPushReply *m = static_cast<MOSDPGPushReply *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH_REPLY);
+  assert(m->get_type() == MSG_OSD_PG_PUSH_REPLY);
   pg_shard_t from = m->from;
 
   vector<PushOp> replies(1);
@@ -2494,7 +2494,7 @@ void ReplicatedBackend::do_push_reply(OpRequestRef op)
 void ReplicatedPG::do_backfill(OpRequestRef op)
 {
   MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
+  assert(m->get_type() == MSG_OSD_PG_BACKFILL);
   dout(10) << "do_backfill " << *m << dendl;
 
   op->mark_started();
@@ -2567,7 +2567,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
   hobject_t snapoid(
     coid.oid, coid.get_key(),
-    obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
+    obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.get_hash(),
     info.pgid.pool(), coid.get_namespace());
   ObjectContextRef snapset_obc = get_object_context(snapoid, false);
 
@@ -3257,7 +3257,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       MOSDOp *m = static_cast<MOSDOp *>(ctx->op->get_req());
       object_locator_t src_oloc;
       get_src_oloc(soid.oid, m->get_object_locator(), src_oloc);
-      hobject_t src_oid(osd_op.soid, src_oloc.key, soid.hash,
+      hobject_t src_oid(osd_op.soid, src_oloc.key, soid.get_hash(),
 			info.pgid.pool(), src_oloc.nspace);
       src_obc = ctx->src_obc[src_oid];
       dout(10) << " src_oid " << src_oid << " obc " << src_obc << dendl;
@@ -5040,7 +5040,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
   ObjectContextRef rollback_to;
   int ret = find_object_context(
-    hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(),
+    hobject_t(soid.oid, soid.get_key(), snapid, soid.get_hash(), info.pgid.pool(),
 	      soid.get_namespace()),
     &rollback_to, false, false, &missing_oid);
   if (ret == -EAGAIN) {
@@ -5541,7 +5541,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     } else if (ctx->new_snapset.clones.size() &&
 	       !ctx->cache_evict) {
       // save snapset on _snap
-      hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
+      hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.get_hash(),
 			info.pgid.pool(), soid.get_namespace());
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << snapoid << dendl;
@@ -6758,6 +6758,19 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
     return -EBUSY;
   }
 
+  if (!fop->blocking && scrubber.write_blocked_by_scrub(oid)) {
+    if (fop->op) {
+      dout(10) << __func__ << " blocked by scrub" << dendl;
+      requeue_op(fop->op);
+      requeue_ops(fop->dup_ops);
+      return -EAGAIN;    // will retry
+    } else {
+      osd->logger->inc(l_osd_tier_try_flush_fail);
+      cancel_flush(fop, false);
+      return -ECANCELED;
+    }
+  }
+
   // successfully flushed; can we clear the dirty bit?
   // try to take the lock manually, since we don't
   // have a ctx yet.
@@ -7585,9 +7598,9 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      bool map_snapid_to_clone,
 				      hobject_t *pmissing)
 {
-  hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.hash,
+  hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.get_hash(),
 		 info.pgid.pool(), oid.get_namespace());
-  hobject_t snapdir(oid.oid, oid.get_key(), CEPH_SNAPDIR, oid.hash,
+  hobject_t snapdir(oid.oid, oid.get_key(), CEPH_SNAPDIR, oid.get_hash(),
 		    info.pgid.pool(), oid.get_namespace());
 
   // want the snapdir?
@@ -7750,7 +7763,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     put_snapset_context(ssc);
     return -ENOENT;
   }
-  hobject_t soid(oid.oid, oid.get_key(), ssc->snapset.clones[k], oid.hash,
+  hobject_t soid(oid.oid, oid.get_key(), ssc->snapset.clones[k], oid.get_hash(),
 		 info.pgid.pool(), oid.get_namespace());
 
   if (pg_log.get_missing().is_missing(soid)) {
@@ -7930,7 +7943,7 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
 
   const hobject_t& soid = m->poid;
 
@@ -8038,7 +8051,7 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   dout(10) << "sub_op_modify_applied on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
   MOSDSubOp *m = static_cast<MOSDSubOp*>(rm->op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
@@ -9021,7 +9034,7 @@ void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
   const hobject_t& soid = reply->get_poid();
-  assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
   pg_shard_t peer = reply->from;
 
@@ -9115,7 +9128,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 void ReplicatedBackend::sub_op_pull(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
 
   op->mark_started();
 
@@ -9387,7 +9400,7 @@ void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
 void ReplicatedPG::sub_op_remove(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_remove " << m->poid << dendl;
 
   op->mark_started();
@@ -10977,6 +10990,14 @@ void ReplicatedPG::scan_range(
     } else {
       bufferlist bl;
       int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
+
+      /* If the object does not exist here, it must have been removed
+	 * between the collection_list_partial and here.  This can happen
+	 * for the first item in the range, which is usually last_backfill.
+	 */
+      if (r == -ENOENT)
+	continue;
+
       assert(r >= 0);
       object_info_t oi(bl);
       bi->objects[*p] = oi.version;
@@ -11207,7 +11228,7 @@ void ReplicatedPG::hit_set_persist()
     assert(peer_info.count(*p));
     const pg_info_t& pi = peer_info[*p];
     if (pi.last_backfill == hobject_t() ||
-	pi.last_backfill.hash == info.pgid.ps()) {
+	pi.last_backfill.get_hash() == info.pgid.ps()) {
       dout(10) << __func__ << " backfill target osd." << *p
 	       << " last_backfill has not progressed past pgid ps"
 	       << dendl;
@@ -11408,9 +11429,9 @@ void ReplicatedPG::agent_setup()
     // choose random starting position
     agent_state->position = hobject_t();
     agent_state->position.pool = info.pgid.pool();
-    agent_state->position.hash = pool.info.get_random_pg_position(
+    agent_state->position.set_hash(pool.info.get_random_pg_position(
       info.pgid.pgid,
-      rand());
+      rand()));
     agent_state->start = agent_state->position;
 
     dout(10) << __func__ << " allocated new state, position "

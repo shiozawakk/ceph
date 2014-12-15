@@ -341,18 +341,24 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
-CompatSet Monitor::get_supported_features()
+CompatSet Monitor::get_initial_supported_features()
 {
   CompatSet::FeatureSet ceph_mon_feature_compat;
   CompatSet::FeatureSet ceph_mon_feature_ro_compat;
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
+}
+
+CompatSet Monitor::get_supported_features()
+{
+  CompatSet compat = get_initial_supported_features();
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
+  return compat;
 }
 
 CompatSet Monitor::get_legacy_features()
@@ -3173,6 +3179,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   switch (m->get_type()) {
 
     // OSDs
+    case CEPH_MSG_MON_GET_OSDMAP:
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
@@ -4224,7 +4231,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   t->put(MONITOR_NAME, "magic", magicbl);
 
 
-  features = get_supported_features();
+  features = get_initial_supported_features();
   write_features(t);
 
   // save monmap, osdmap, keyring.

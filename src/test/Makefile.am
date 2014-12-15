@@ -286,6 +286,11 @@ unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_addrs
 
+unittest_blkdev_SOURCES = test/common/test_blkdev.cc
+unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_blkdev
+
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -528,6 +533,11 @@ unittest_context_SOURCES = test/common/test_context.cc
 unittest_context_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_context_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_context
+
+unittest_safe_io_SOURCES = test/common/test_safe_io.cc
+unittest_safe_io_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_safe_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_safe_io
 
 unittest_heartbeatmap_SOURCES = test/heartbeat_map.cc
 unittest_heartbeatmap_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
