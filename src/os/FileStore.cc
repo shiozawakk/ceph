@@ -527,7 +527,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_fail_eio(g_conf->filestore_fail_eio),
-  m_filestore_replica_fadvise(g_conf->filestore_replica_fadvise),
+  m_filestore_fadvise(g_conf->filestore_fadvise),
   do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
@@ -707,12 +707,6 @@ void FileStore::create_backend(long f_type)
 
   case XFS_SUPER_MAGIC:
     // wbthrottle is constructed with fs(WBThrottle::XFS)
-    if (m_filestore_replica_fadvise) {
-      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
-      g_conf->set_val("filestore_replica_fadvise", "false");
-      g_conf->apply_changes(NULL);
-      assert(m_filestore_replica_fadvise == false);
-    }
     break;
 #endif
   }
@@ -3104,10 +3098,6 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
       r = -errno;
       goto out3;
     }
-    r = ::ftruncate(**n, st.st_size);
-    if (r < 0) {
-      goto out3;
-    }
 
     dout(20) << "objectmap clone" << dendl;
     r = object_map->clone(oldoid, newoid, &spos);
@@ -3187,6 +3177,7 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     extent->fe_logical = srcoff;
   }
 
+  int64_t written = 0;
   uint64_t i = 0;
 
   while (i < fiemap->fm_mapped_extents) {
@@ -3260,18 +3251,38 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
         op += (r-op);
       }
       if (r < 0)
-        break;
+        goto out;
       pos += r;
     }
+    written += end;
     i++;
     extent++;
   }
 
-  if (r >= 0 && m_filestore_sloppy_crc) {
-    int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
-    assert(rc >= 0);
+  if (r >= 0) {
+    if (m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
+      assert(rc >= 0);
+    }
+    struct stat st;
+    r = ::fstat(to, &st);
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << ": fstat error at " << to << " " << cpp_strerror(r) << dendl;
+      goto out;
+    }
+    if (st.st_size < (int)(dstoff + len)) {
+      r = ::ftruncate(to, dstoff + len);
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << ": ftruncate error at " << dstoff+len << " " << cpp_strerror(r) << dendl;
+        goto out;
+      }
+    }
+    r = written;
   }
 
+ out:
   dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
@@ -3366,10 +3377,15 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
     goto out;
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
+  if (r < 0) {
+    r = -errno;
+    goto out3;
+  }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
 
+ out3:
   lfn_close(n);
  out:
   lfn_close(o);
@@ -5202,7 +5218,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_dump_file",
     "filestore_kill_at",
     "filestore_fail_eio",
-    "filestore_replica_fadvise",
+    "filestore_fadvise",
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
     "filestore_max_alloc_hint_size",
@@ -5236,7 +5252,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_sloppy_crc") ||
       changed.count("filestore_sloppy_crc_block_size") ||
       changed.count("filestore_max_alloc_hint_size") ||
-      changed.count("filestore_replica_fadvise")) {
+      changed.count("filestore_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
@@ -5246,7 +5262,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_queue_committing_max_bytes = conf->filestore_queue_committing_max_bytes;
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
-    m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
+    m_filestore_fadvise = conf->filestore_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
